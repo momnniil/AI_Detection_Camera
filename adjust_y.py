@@ -19,11 +19,6 @@ THRESHOLD_HEAD_DROP  = 0.04  # 低頭門檻（Y 掉落比例）
 THRESHOLD_HUNCHING   = 15    # 駝背門檻（角度差，與校準時比）
 THRESHOLD_BODY_TILT  = 0.02  # 歪斜門檻（肩膀高低差，與校準時比）
 
-# 取得螢幕解析度
-user32 = ctypes.windll.user32
-screen_w = user32.GetSystemMetrics(0)
-screen_h = user32.GetSystemMetrics(1)
-
 # ============================================================
 #  MediaPipe 初始化
 # ============================================================
@@ -275,7 +270,7 @@ while cap.isOpened():
     # 可調整大小
     cv2.namedWindow("AI Posture Guardian", cv2.WINDOW_NORMAL) 
     # 將影像縮放到螢幕尺寸
-    frame = cv2.resize(frame, (screen_w, screen_h))
+    frame = cv2.resize(frame, (1920, 1080))
     
     cv2.imshow("AI Posture Guardian", frame)
 
