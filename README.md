@@ -80,10 +80,10 @@ pip install "mediapipe==0.10.9"
 ## 快速開始（已有 venv）
 
 每次要使用時，只需要這兩行：
-
+```bash
 venv\Scripts\activate
 .\venv\Scripts\python.exe main.py
-
+```
 結束程式按 ESC，會自動產生當天的 Excel 報表。
 
 ---
