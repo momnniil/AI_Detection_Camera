@@ -1,177 +1,9 @@
-# # ============================================================
-# #  modules/eye_tracker.py  ─ 眼睛偵測
-# #  眨眼：用眼睛面積比例（PolyArea 法，來自參考程式）
-# #  注視：用 iris landmark 追蹤眼球位置
-# # ============================================================
-# import time
-# import math
-# import numpy as np
-# from config import (
-#     EYE_GAZE_STILL_SEC,
-#     EYE_GAZE_MOVE_THRESH,
-#     BLINK_RATE_WARN_MIN,
-#     BLINK_EAR_THRESH,      # 這裡當作 blink ratio 門檻（眼睛面積法）
-#     BLINK_CONSEC_FRAMES,
-# )
-
-# # ── FaceMesh 眼部 landmark 索引（與參考程式相同）─────────────
-# LEFT_EYE = [362, 382, 381, 380, 374, 373, 390,
-#             249, 263, 466, 388, 387, 386, 385, 384, 398]
-# RIGHT_EYE = [33,  7,   163, 144, 145, 153, 154,
-#              155, 133, 173, 157, 158, 159, 160, 161, 246]
-
-
-# # ── 工具函式 ─────────────────────────────────────────────────
-# def _poly_area(x, y) -> float:
-#     """Shoelace formula，計算多邊形面積"""
-#     return 0.5 * abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
-
-
-# def _euclid(p1, p2) -> float:
-#     return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
-
-
-# def _blink_ratio(mesh_coords, right_idx, left_idx) -> float:
-#     """
-#     與參考程式相同的 blink ratio：
-#     水平距離 / 垂直距離，值越大 = 眼睛越閉
-#     """
-#     rh = _euclid(mesh_coords[right_idx[0]],  mesh_coords[right_idx[8]])
-#     rv = _euclid(mesh_coords[right_idx[12]], mesh_coords[right_idx[4]])
-#     lh = _euclid(mesh_coords[left_idx[0]],   mesh_coords[left_idx[8]])
-#     lv = _euclid(mesh_coords[left_idx[12]],  mesh_coords[left_idx[4]])
-#     re_ratio = rh / (rv + 1e-6)
-#     le_ratio = lh / (lv + 1e-6)
-#     return (re_ratio + le_ratio) / 2
-
-
-# def _get_gaze_point(face_lm) -> tuple:
-#     """用 iris landmark 取眼球中心（歸一化座標）"""
-#     try:
-#         lx, ly = face_lm[468].x, face_lm[468].y
-#         rx, ry = face_lm[473].x, face_lm[473].y
-#     except (IndexError, AttributeError):
-#         lx = (face_lm[33].x + face_lm[133].x) / 2
-#         ly = (face_lm[33].y + face_lm[133].y) / 2
-#         rx = (face_lm[362].x + face_lm[263].x) / 2
-#         ry = (face_lm[362].y + face_lm[263].y) / 2
-#     return (lx + rx) / 2, (ly + ry) / 2
-
-
-# def _to_coords(face_lm, indices, img_w=640, img_h=480):
-#     """把 landmark 轉成像素座標 list，供 PolyArea 使用"""
-#     return [(int(face_lm[i].x * img_w), int(face_lm[i].y * img_h)) for i in indices]
-
-
-# # ── EyeTracker ───────────────────────────────────────────────
-# class EyeTracker:
-#     def __init__(self):
-#         # 記錄校準時的眼睛面積（第一幀偵測到就記錄）
-#         self._eye_area_ref = None
-#         self.reset()
-
-#     def reset(self):
-#         self._gaze_ref = None
-#         self._gaze_still_start = None
-#         self._gaze_warned = False
-
-#         self._blink_counter = 0
-#         self._blink_total = 0
-#         self._blink_window_start = time.time()
-#         self._blink_warned = False
-
-#         self.gaze_still_sec = 0.0
-#         self.blink_rate_min = 0.0
-#         self.eye_area = 0.0
-#         self.blink_ratio = 0.0
-
-#     def update(self, face_lm, img_w: int = 640, img_h: int = 480) -> list:
-#         """
-#         傳入 FaceMesh landmark list。
-#         回傳需要觸發的警告字串 list（空 = 無警告）。
-#         """
-#         warnings = []
-#         now = time.time()
-
-#         # ── 1. 眼睛面積 & 眨眼偵測 ──────────────────────────
-#         try:
-#             r_coords = _to_coords(face_lm, RIGHT_EYE, img_w, img_h)
-#             l_coords = _to_coords(face_lm, LEFT_EYE,  img_w, img_h)
-#             r_area = _poly_area(
-#                 np.array([p[0] for p in r_coords]),
-#                 np.array([p[1] for p in r_coords])
-#             )
-#             l_area = _poly_area(
-#                 np.array([p[0] for p in l_coords]),
-#                 np.array([p[1] for p in l_coords])
-#             )
-#             self.eye_area = (r_area + l_area) / 2
-
-#             # 第一次偵測到就記錄為參考面積
-#             if self._eye_area_ref is None and self.eye_area > 10:
-#                 self._eye_area_ref = self.eye_area
-
-#             # blink ratio（水平/垂直距離比，同參考程式）
-#             mesh_coords = [(int(face_lm[i].x * img_w), int(face_lm[i].y * img_h))
-#                            for i in range(len(face_lm) if hasattr(face_lm, '__len__') else 478)]
-#             self.blink_ratio = _blink_ratio(mesh_coords, RIGHT_EYE, LEFT_EYE)
-
-#             # ratio 超過門檻 = 眼睛閉合
-#             if self.blink_ratio > BLINK_EAR_THRESH:
-#                 self._blink_counter += 1
-#             else:
-#                 if self._blink_counter >= BLINK_CONSEC_FRAMES:
-#                     self._blink_total += 1
-#                 self._blink_counter = 0
-
-#         except Exception:
-#             pass
-
-#         # 每 60 秒結算眨眼率
-#         elapsed = now - self._blink_window_start
-#         if elapsed >= 60:
-#             self.blink_rate_min = self._blink_total / (elapsed / 60)
-#             if self.blink_rate_min < BLINK_RATE_WARN_MIN and not self._blink_warned:
-#                 warnings.append("LOW_BLINK")
-#                 self._blink_warned = True
-#             self._blink_total = 0
-#             self._blink_window_start = now
-#             self._blink_warned = False
-#         elif elapsed > 5:
-#             self.blink_rate_min = self._blink_total / (elapsed / 60)
-
-#         # ── 2. 注視方向偵測 ──────────────────────────────────
-#         try:
-#             gx, gy = _get_gaze_point(face_lm)
-#             if self._gaze_ref is None:
-#                 self._gaze_ref = (gx, gy)
-#                 self._gaze_still_start = now
-#             else:
-#                 moved = math.hypot(gx - self._gaze_ref[0],
-#                                    gy - self._gaze_ref[1]) > EYE_GAZE_MOVE_THRESH
-#                 if moved:
-#                     self._gaze_ref = (gx, gy)
-#                     self._gaze_still_start = now
-#                     self._gaze_warned = False
-#                 else:
-#                     self.gaze_still_sec = now - self._gaze_still_start
-#                     if self.gaze_still_sec >= EYE_GAZE_STILL_SEC and not self._gaze_warned:
-#                         warnings.append("GAZE_FIXATION")
-#                         self._gaze_warned = True
-#         except Exception:
-#             pass
-
-#         return warnings
-
 import math
-#     @property
-#     def gaze_info(self) -> dict:
-#         return {
-#             "gaze_still_sec": self.gaze_still_sec,
-#             "blink_rate_min": self.blink_rate_min,
-#             "eye_area":       self.eye_area,
-#             "blink_ratio":    self.blink_ratio,
-#         }
+import time
+import numpy as np
+from config import (BLINK_CONSEC_FRAMES, BLINK_EAR_THRESH, BLINK_RATE_WARN_MIN,
+                    EYE_GAZE_MOVE_THRESH, EYE_GAZE_STILL_SEC)
+
 # ============================================================
 #  modules/eye_tracker.py
 #  - MediaPipe Iris 虹膜追蹤
@@ -180,12 +12,6 @@ import math
 #  - 虹膜幾何投影視距估算
 #  - Cross-Modal Fusion 疲勞分數
 # ============================================================
-import time
-
-import numpy as np
-
-from config import (BLINK_CONSEC_FRAMES, BLINK_EAR_THRESH, BLINK_RATE_WARN_MIN,
-                    EYE_GAZE_MOVE_THRESH, EYE_GAZE_STILL_SEC)
 
 # ── FaceMesh 眼部 landmark 索引 ───────────────────────────────
 LEFT_EYE = [
@@ -424,11 +250,9 @@ class EyeTracker:
             if self.blink_rate_min < BLINK_RATE_WARN_MIN and not self._blink_warned:
                 warnings.append("LOW_BLINK")
                 self._blink_warned = True
-            self._blink_total = 0
             self._blink_window_start = now
+            self._blink_total = 0
             self._blink_warned = False
-        elif elapsed > 5:
-            self.blink_rate_min = self._blink_total / (elapsed / 60)
 
         # ── 2. 虹膜幾何投影視距估算 ──────────────────────────
         focal_px = img_w  # 近似焦距（適合一般筆電 FOV ~60°）

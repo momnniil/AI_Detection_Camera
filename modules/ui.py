@@ -8,9 +8,9 @@ from config import BAD_POSTURE_WARN_SEC, SITTING_LIMIT_MIN
 
 def draw_ui(frame, state: dict) -> None:
     h, w = frame.shape[:2]
-    pad = int(0.003 * w)
-    box_w = int(0.30 * w)
-    box_h = int(0.60 * h)  # 加高容納視距與疲勞資訊
+    pad = int(0.002 * w)
+    box_w = int(0.32 * w)
+    box_h = int(0.53 * h)  # 加高容納視距與疲勞資訊
     dis_x = int(0.01 * w)
     dis_y = int(0.06 * h)
 
@@ -18,9 +18,9 @@ def draw_ui(frame, state: dict) -> None:
     font_scale_large = w / 1920 * 2
     font_scale_med = w / 1920 * 1
     font_scale_small = w / 1920 * 0.9
-    thickness_large = max(2, int(w / 1920 * 2))
+    thickness_large = max(3, int(w / 1920 * 2))
     thickness_med = max(2, int(w / 1920 * 1))
-    thickness_small = max(1, int(w / 1920 * 1))
+    thickness_small = max(2, int(w / 1920 * 1))
 
     _, lh_large = cv2.getTextSize("A", font, font_scale_large, thickness_large)[:2]
     _, lh_med = cv2.getTextSize("A", font, font_scale_med, thickness_med)[:2]
