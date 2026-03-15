@@ -1,4 +1,3 @@
-# AI_Detection_Camera
 # AI Posture Guardian
 
 即時偵測使用者坐姿、眼睛狀態與疲勞程度的 AI 健康監控系統。
@@ -48,26 +47,46 @@ py -3.11 -m venv venv
 venv\Scripts\activate
 ```
 
-### 2. 安裝套件
+### 2. 安裝套件（方法一：一般安裝）
 
 ```bash
-.\venv\Scripts\python.exe -m pip install --only-binary=:all: ^
-    "numpy==1.26.4" ^
-    "protobuf==3.20.3" ^
-    "mediapipe==0.10.9" ^
-    opencv-python ^
-    pandas ^
-    matplotlib ^
-    xlsxwriter
+pip install "numpy==1.26.4" "protobuf==3.20.3" mediapipe opencv-python pandas matplotlib xlsxwriter
+```
+
+### 2. 安裝套件（方法二：若方法一失敗，改用預編譯版本）
+
+```bash
+.\venv\Scripts\python.exe -m pip install --only-binary=:all: "numpy==1.26.4" "protobuf==3.20.3" mediapipe opencv-python pandas matplotlib xlsxwriter
 ```
 
 > ⚠️ 套件版本限制說明：
-> - `numpy==1.26.4`：tensorflow-cpu 2.13 與 pandas 的共同相容版本
-> - `protobuf==3.20.3`：mediapipe 0.10.9 要求 protobuf < 4
-> - `mediapipe==0.10.9`：需指定版本，新版已移除 `solutions` API
+> - `numpy==1.26.4`：pandas 與 mediapipe 的共同相容版本
+> - `protobuf==3.20.3`：mediapipe 0.10.9 要求 protobuf < 4，裝新版會衝突
+> - `mediapipe`：需為 0.10.9 版，新版已移除 `solutions` API
+
+### 3. 確認 mediapipe 版本
+
+```bash
+pip show mediapipe
+```
+
+若版本不是 0.10.9，手動指定：
+
+```bash
+pip install "mediapipe==0.10.9"
+```
 
 ---
+## 快速開始（已有 venv）
 
+每次要使用時，只需要這兩行：
+
+venv\Scripts\activate
+.\venv\Scripts\python.exe main.py
+
+結束程式按 ESC，會自動產生當天的 Excel 報表。
+
+---
 ## 檔案結構
 
 ```
@@ -75,8 +94,6 @@ AI_Detection_Camera/
 ├── main.py               # 主程式（主迴圈）
 ├── config.py             # 所有可調參數
 ├── make_pic.py           # Excel 報表產生器
-├── keras_model.h5        # Teachable Machine 口罩辨識模型
-├── labels.txt            # 模型標籤（0 = no mask, 1 = has mask）
 └── modules/
     ├── posture.py        # 姿勢分析
     ├── eye_tracker.py    # 眼睛偵測、視距、疲勞評分
